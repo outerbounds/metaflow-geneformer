@@ -385,14 +385,23 @@ class ModelOps:
                     self.eval_macro_f1_data.append({"step": self.most_recent_step, "value": logs['eval_macro_f1']})
                     self.eval_macro_f1_chart.update(self.eval_macro_f1_vega_spec)
                 if 'train_runtime' in logs:
-                    current.card['train_progress'].append(
-                        Table([
-                            [Markdown('**Train runtime**'), Markdown(f"{round(logs['train_runtime'], 3)}")],
-                            [Markdown('**Train samples / sec**'), Markdown(f"{round(logs['train_samples_per_second'], 3)}")],
-                            [Markdown('**Train steps / sec**'), Markdown(f"{round(logs['train_steps_per_second'], 3)}")],
-                            [Markdown('**Total Flos**'), Markdown(f"{logs['total_flos']}")]
-                        ])
-                    )
+                    rows = [
+                        [Markdown('**Train runtime**'), Markdown(f"{round(logs['train_runtime'], 3)}")],
+                        [Markdown('**Train samples / sec**'), Markdown(f"{round(logs['train_samples_per_second'], 3)}")],
+                        [Markdown('**Train steps / sec**'), Markdown(f"{round(logs['train_steps_per_second'], 3)}")],
+                        [Markdown('**Total Flos**'), Markdown(f"{round(logs['total_flos'])}")],
+                        [Markdown('**TFLOPs / second**'), Markdown(f"{round(logs['total_flos'] // 1e12 / logs['train_runtime'], 3)}")],
+                    ]
+                    print(logs['total_flos'], type(logs['total_flos']))
+                    # print(logs['total_flos'], type(logs['total_flos']))
+                    # print(total_flops // 1e12 / logs['train_runtime'], type(total_flops // 1e12 / logs['train_runtime']))
+                    # total_flops = int(logs['total_flos'])
+                    # tflops_s = total_flops // 1e12 / logs['train_runtime']
+                    # rows += [
+                    #     [Markdown('**Total Flos**'), Markdown(f"{total_flops}")]
+                    #     [Markdown('**TFLOPs / second**'), Markdown(f"{tflops_s}")]
+                    # ]
+                    current.card['train_progress'].append(Table(rows))
 
 
         # set logging steps

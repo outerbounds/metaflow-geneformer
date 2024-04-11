@@ -6,6 +6,7 @@ import subprocess
 # 3rd party
 from metaflow import FlowSpec, step, kubernetes, current, Parameter, current, card
 from metaflow.profilers import gpu_profile
+from metaflow.cards import Markdown
 
 # custom
 from utils import DataStore, ModelOps
@@ -73,8 +74,7 @@ class CellClassificationFinetuning(FlowSpec, DataStore, ModelOps):
     # @kubernetes(gpu=NUM_GPUS, cpu=NUM_CPUS, image=IMAGE)
     @gpu_profile(interval=1)
     @card(type="blank", refresh_interval=5, customize=True, id="train_progress")
-    # @card(type="blank", id="parameters")
-    # @card(type="blank", refresh_interval=5, customize=True, id="metrics")
+    @card(type="blank", id="outputs")
     @step
     def finetune(self):
         from datasets import load_from_disk
@@ -95,10 +95,9 @@ class CellClassificationFinetuning(FlowSpec, DataStore, ModelOps):
             MODEL_CHECKPOINT_DIR,
             pretrained_path=self.pretrained_geneformer_path
         )
-        self.upload(
-            local_path=output_dir,
-            store_key=os.path.join(DATA_KEY, str(current.run_id), output_dir),
-        )
+        store_key = os.path.join(DATA_KEY, str(current.run_id), output_dir)
+        self.upload(local_path=output_dir, store_key=store_key)
+        current.card['outputs'].append(Markdown(f"# Saving model to S3 key {store_key}"))
         self.next(self.join)
 
     @step
