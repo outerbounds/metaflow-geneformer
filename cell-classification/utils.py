@@ -245,8 +245,8 @@ class ModelOps:
 
         class _ProgressBarCallback(TrainerCallback):
             """
-            A basic Huggingface trainer callback that updates a Metaflow card component with two rows.
-            The assumed structure of `progress_card_rows` is epochs in first row, steps in second row.
+            A basic Huggingface trainer callback that updates a Metaflow card components.
+            It updates progress bars, sets parameters, logs metrics, and final outputs.
             """
 
             def on_train_begin(self, args, state, control, **kwargs):
