@@ -21,6 +21,23 @@ docker build -t geneformer .
 You can find hyperparameters to tune in `config.py`. 
 
 ### Run the workflow
+
+#### Run the workflow locally
+Download Geneformer and install dependencies in the virtual environment where you are running Metaflow
+```bash
+git clone https://huggingface.co/ctheodoris/Geneformer
+cd Geneformer
+pip install .
 ```
-python flow.py run
+
+Then, run the flow, passing a parameter to the workflow that is used to load the model with HuggingFace:
+```bash
+python flow.py run --path <PATH/TO/Geneformer>                    # default model
+python flow.py run --path <PATH/TO/Geneformer/geneformer-12L-30M> # bigger model
+```
+
+#### Run the workflow remotely
+```bash 
+python flow.py run # by default, try to use geneformer-12L-30M. use --path as before if you change stuff in the docker image
+python flow.py run --path /Geneformer # to use the default model.
 ```
