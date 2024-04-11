@@ -1,5 +1,6 @@
+from metaflow import S3, current
 from metaflow.metaflow_config import DATATOOLS_S3ROOT
-from metaflow import S3
+from metaflow.cards import Markdown, ProgressBar, Table, VegaChart
 import os
 import shutil
 import subprocess
@@ -99,7 +100,7 @@ class DataStore:
         store_key : str
             Key suffixed to the store_root to save the store contents to.
         """
-        with TemporaryDirectory() as temp_dir: 
+        with TemporaryDirectory() as temp_dir:
             # OK for small data. For big data, use a different method.
             dataset.save_to_disk(temp_dir)
             self.upload(temp_dir, store_key)
@@ -128,7 +129,7 @@ class ModelOps:
                 organ_ids = [organ]
                 organ_list += [organ]
 
-            print(organ)
+            print("Preprocessing data for: ", organ)
 
             # filter datasets for given organ
             def if_organ(example):
@@ -224,6 +225,7 @@ class ModelOps:
         organ_label_dict,
         checkpoint_path,
         pretrained_path="/Geneformer/geneformer-12L-30M",  # absolute path set in Dockerfile
+        # progress_card_rows=[],
     ):
 
         print("Finetuning model for organ: ", organ)
@@ -231,13 +233,167 @@ class ModelOps:
         from transformers import BertForSequenceClassification
         from transformers import Trainer
         from transformers.training_args import TrainingArguments
+        from transformers import TrainerCallback
         from geneformer import DataCollatorForCellClassification
+        from transformers import TrainerCallback
         import datetime
         import pickle
         import subprocess
         import seaborn as sns
 
         sns.set()
+
+        class _ProgressBarCallback(TrainerCallback):
+            """
+            A basic Huggingface trainer callback that updates a Metaflow card component with two rows.
+            The assumed structure of `progress_card_rows` is epochs in first row, steps in second row.
+            """
+
+            def on_train_begin(self, args, state, control, **kwargs):
+                current.card.append(
+                    Markdown(f"# Model tuning progress for {organ}")
+                )
+
+                # progess bar table
+                steps = EPOCHS * len(organ_trainset) // GENEFORMER_BATCH_SIZE // 2
+                self.progress_table_rows = [
+                    [Markdown(f"**Epochs** ({EPOCHS} total)"), ProgressBar(max=EPOCHS)],
+                    [Markdown(f"**Steps** ({steps} total)"), ProgressBar(max=steps)],
+                ]
+                current.card["train_progress"].append(Table(self.progress_table_rows))
+                current.card.append(
+                    Markdown(
+                        "**If you see low memory utilization in the gpu_profile, try increasing the GENEFORMER_BATCH_SIZE in config.py, which reduces number of steps.**"
+                    )
+                )
+
+                # parameters table
+                params = [[Markdown(f"Name"), Markdown(f"Var in `config.py`"), Markdown(f"Value")]]
+                for key, (var, val) in dict(
+                    batch_size=("GENEFORMER_BATCH_SIZE", GENEFORMER_BATCH_SIZE),
+                    max_learning_rate=("MAX_LR", MAX_LR), 
+                    learning_rate_schedule_function=("LR_SCHEDULE_FN", LR_SCHEDULE_FN),
+                    optimizer=("OPTIMIZER", OPTIMIZER),
+                    warmup_steps=("WARMUP_STEPS", WARMUP_STEPS),
+                    freeze_layers=("FREEZE_LAYERS", FREEZE_LAYERS)
+                ).items():
+                    params.append([Markdown(f"**{key}**"), Markdown(f"{var}"), Markdown(f"{val}")])
+
+                current.card["train_progress"].append(Table(params))
+
+                self.grad_norm_vega_spec = {
+                    "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                    "data": {"values": []},
+                    "mark": "line",
+                    "encoding": {
+                        "x": {"field": "step", "type": "quantitative"},
+                        "y": {"field": "value", "type": "quantitative"},
+                    },
+                }
+                self.grad_norm_data = self.grad_norm_vega_spec["data"]["values"]
+                self.grad_norm_chart = VegaChart(self.grad_norm_vega_spec)
+                self.lr_vega_spec = {
+                    "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                    "data": {"values": []},
+                    "mark": "line",
+                    "encoding": {
+                        "x": {"field": "step", "type": "quantitative"},
+                        "y": {"field": "value", "type": "quantitative"},
+                    },
+                }
+                self.lr_data = self.lr_vega_spec["data"]["values"]
+                self.lr_chart = VegaChart(self.lr_vega_spec)
+
+                self.train_loss_vega_spec = {
+                    "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                    "data": {"values": []},
+                    "mark": "line",
+                    "encoding": {
+                        "x": {"field": "step", "type": "quantitative"},
+                        "y": {"field": "value", "type": "quantitative"},
+                    },
+                }
+                self.train_loss_data = self.train_loss_vega_spec["data"]["values"]
+                self.train_loss_chart = VegaChart(self.train_loss_vega_spec)
+                self.eval_loss_vega_spec = {
+                    "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                    "data": {"values": []},
+                    "mark": "line",
+                    "encoding": {
+                        "x": {"field": "step", "type": "quantitative"},
+                        "y": {"field": "value", "type": "quantitative"},
+                    },
+                }
+                self.eval_loss_data = self.eval_loss_vega_spec["data"]["values"]
+                self.eval_loss_chart = VegaChart(self.eval_loss_vega_spec)
+                self.eval_acc_vega_spec = {
+                    "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                    "data": {"values": []},
+                    "mark": "line",
+                    "encoding": {
+                        "x": {"field": "step", "type": "quantitative"},
+                        "y": {"field": "value", "type": "quantitative"},
+                    },
+                }
+                self.eval_acc_data = self.eval_acc_vega_spec["data"]["values"]
+                self.eval_acc_chart = VegaChart(self.eval_acc_vega_spec)
+                self.eval_macro_f1_vega_spec = {
+                    "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                    "data": {"values": []},
+                    "mark": "line",
+                    "encoding": {
+                        "x": {"field": "step", "type": "quantitative"},
+                        "y": {"field": "value", "type": "quantitative"},
+                    },
+                }
+                self.eval_macro_f1_data = self.eval_macro_f1_vega_spec["data"]["values"]
+                self.eval_macro_f1_chart = VegaChart(self.eval_macro_f1_vega_spec)
+                metrics = [
+                    [Markdown(f"Name"), Markdown(f"Value")],
+                    [Markdown(f"Grad norm"), self.grad_norm_chart],
+                    [Markdown(f"Learning rate"), self.lr_chart],
+                    [Markdown(f"Train loss"), self.train_loss_chart],
+                    [Markdown(f"Eval loss"), self.eval_loss_chart],
+                    [Markdown(f"Eval acc"), self.eval_acc_chart],
+                    [Markdown(f"Eval macro f1"), self.eval_macro_f1_chart],
+                ]
+                current.card['train_progress'].append(Table(metrics))
+                current.card.refresh()
+
+            def on_epoch_end(self, args, state, control, **kwargs):
+                self.progress_table_rows[0][1].update(state.epoch)
+                current.card.refresh()
+
+            def on_step_end(self, args, state, control, **kwargs):
+                self.progress_table_rows[1][1].update(state.global_step)
+                self.most_recent_step=state.global_step
+                current.card.refresh()
+
+            def on_log(self, args, state, control, model=None, logs=None, **kwargs):
+                if 'loss' in logs:
+                    self.grad_norm_data.append({"step": self.most_recent_step, "value": logs['grad_norm']})
+                    self.grad_norm_chart.update(self.grad_norm_vega_spec)
+                    self.lr_data.append({"step": self.most_recent_step, "value": logs['learning_rate']})
+                    self.lr_chart.update(self.lr_vega_spec)
+                    self.train_loss_data.append({"step": self.most_recent_step, "value": logs['loss']})
+                    self.train_loss_chart.update(self.train_loss_vega_spec)
+                if 'eval_loss' in logs:
+                    self.eval_loss_data.append({"step": self.most_recent_step, "value": logs['eval_loss']})
+                    self.eval_loss_chart.update(self.eval_loss_vega_spec)
+                    self.eval_acc_data.append({"step": self.most_recent_step, "value": logs['eval_accuracy']})
+                    self.eval_acc_chart.update(self.eval_acc_vega_spec)
+                    self.eval_macro_f1_data.append({"step": self.most_recent_step, "value": logs['eval_macro_f1']})
+                    self.eval_macro_f1_chart.update(self.eval_macro_f1_vega_spec)
+                if 'train_runtime' in logs:
+                    current.card['train_progress'].append(
+                        Table([
+                            [Markdown('**Train runtime**'), Markdown(f"{round(logs['train_runtime'], 3)}")],
+                            [Markdown('**Train samples / sec**'), Markdown(f"{round(logs['train_samples_per_second'], 3)}")],
+                            [Markdown('**Train steps / sec**'), Markdown(f"{round(logs['train_steps_per_second'], 3)}")],
+                            [Markdown('**Total Flos**'), Markdown(f"{logs['total_flos']}")]
+                        ])
+                    )
+
 
         # set logging steps
         logging_steps = round(len(organ_trainset) / GENEFORMER_BATCH_SIZE / 10)
@@ -295,7 +451,9 @@ class ModelOps:
             train_dataset=organ_trainset,
             eval_dataset=organ_evalset,
             compute_metrics=self.compute_metrics,
+            callbacks=[_ProgressBarCallback],
         )
+
         # train the cell type classifier
         trainer.train()
         predictions = trainer.predict(organ_evalset)
