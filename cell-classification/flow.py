@@ -53,7 +53,7 @@ class CellClassificationFinetuning(FlowSpec, DataStore, ModelOps):
             organ_list,
         ) = self._preprocess(train_dataset)
         self.model_splits = []
-        for organ in organ_list[:1]:
+        for organ in organ_list:
             organ_trainset = trainset_dict[organ]
             organ_evalset = evalset_dict[organ]
             organ_label_dict = traintargetdict_dict[organ]
@@ -71,7 +71,7 @@ class CellClassificationFinetuning(FlowSpec, DataStore, ModelOps):
             )
         self.next(self.finetune, foreach="model_splits")
 
-    # @kubernetes(gpu=NUM_GPUS, cpu=NUM_CPUS, image=IMAGE)
+    @kubernetes(gpu=NUM_GPUS, cpu=NUM_CPUS, image=IMAGE)
     @gpu_profile(interval=1)
     @card(type="blank", refresh_interval=5, customize=True, id="train_progress")
     @card(type="blank", id="outputs")

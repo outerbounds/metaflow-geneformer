@@ -392,15 +392,6 @@ class ModelOps:
                         [Markdown('**Total Flos**'), Markdown(f"{round(logs['total_flos'])}")],
                         [Markdown('**TFLOPs / second**'), Markdown(f"{round(logs['total_flos'] // 1e12 / logs['train_runtime'], 3)}")],
                     ]
-                    print(logs['total_flos'], type(logs['total_flos']))
-                    # print(logs['total_flos'], type(logs['total_flos']))
-                    # print(total_flops // 1e12 / logs['train_runtime'], type(total_flops // 1e12 / logs['train_runtime']))
-                    # total_flops = int(logs['total_flos'])
-                    # tflops_s = total_flops // 1e12 / logs['train_runtime']
-                    # rows += [
-                    #     [Markdown('**Total Flos**'), Markdown(f"{total_flops}")]
-                    #     [Markdown('**TFLOPs / second**'), Markdown(f"{tflops_s}")]
-                    # ]
                     current.card['train_progress'].append(Table(rows))
 
 
