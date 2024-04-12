@@ -4,7 +4,7 @@ import sys
 import subprocess
 
 # 3rd party
-from metaflow import FlowSpec, step, kubernetes, current, Parameter, current, card
+from metaflow import FlowSpec, step, kubernetes, current, Parameter, current, card, conda
 from metaflow.profilers import gpu_profile
 from metaflow.cards import Markdown
 
@@ -26,7 +26,7 @@ class CellClassificationFinetuning(FlowSpec, DataStore, ModelOps):
         "path",
         help="location of the Geneformer model in local execution context or inside your Docker image",
         type=str,
-        default="/Geneformer/geneformer-12L-30M",
+        default="/Geneformer", # "/Geneformer/geneformer-12L-30M"
     )
 
     @step
@@ -38,6 +38,7 @@ class CellClassificationFinetuning(FlowSpec, DataStore, ModelOps):
             self.upload(local_path=DATA_DIR, store_key=s3_path)
         self.next(self.preprocess)
 
+    @conda(packages={'huggingface::datasets': '2.14.5'})
     @step
     def preprocess(self):
         from datasets import load_from_disk
@@ -71,6 +72,7 @@ class CellClassificationFinetuning(FlowSpec, DataStore, ModelOps):
             )
         self.next(self.finetune, foreach="model_splits")
 
+    @conda(disabled=True)
     @kubernetes(gpu=NUM_GPUS, cpu=NUM_CPUS, image=IMAGE)
     @gpu_profile(interval=1)
     @card(type="blank", refresh_interval=5, customize=True, id="train_progress")

@@ -1,4 +1,4 @@
-<img style="display: block; float: left; max-width: 20%; height: auto; margin: auto; float: none!important;" src="/images/cell-classification.jpg"/>
+<img style="display: block; float: left; max-width: 20%; height: auto; margin: auto; float: none!important;" src="../images/cell-classification.jpg"/>
 
 # Instructions
 

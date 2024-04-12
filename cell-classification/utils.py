@@ -225,7 +225,6 @@ class ModelOps:
         organ_label_dict,
         checkpoint_path,
         pretrained_path="/Geneformer/geneformer-12L-30M",  # absolute path set in Dockerfile
-        # progress_card_rows=[],
     ):
 
         print("Finetuning model for organ: ", organ)
@@ -235,13 +234,14 @@ class ModelOps:
         from transformers.training_args import TrainingArguments
         from transformers import TrainerCallback
         from geneformer import DataCollatorForCellClassification
-        from transformers import TrainerCallback
         import datetime
         import pickle
         import subprocess
         import seaborn as sns
 
         sns.set()
+
+        _hyperparams = {}
 
         class _ProgressBarCallback(TrainerCallback):
             """
@@ -255,7 +255,8 @@ class ModelOps:
                 )
 
                 # progess bar table
-                steps = EPOCHS * len(organ_trainset) // GENEFORMER_BATCH_SIZE // 2
+                # steps = EPOCHS * len(organ_trainset) // GENEFORMER_BATCH_SIZE // 2
+                steps = state.max_steps
                 self.progress_table_rows = [
                     [Markdown(f"**Epochs** ({EPOCHS} total)"), ProgressBar(max=EPOCHS)],
                     [Markdown(f"**Steps** ({steps} total)"), ProgressBar(max=steps)],
@@ -277,6 +278,7 @@ class ModelOps:
                     warmup_steps=("WARMUP_STEPS", WARMUP_STEPS),
                     freeze_layers=("FREEZE_LAYERS", FREEZE_LAYERS)
                 ).items():
+                    _hyperparams[key] = val
                     params.append([Markdown(f"**{key}**"), Markdown(f"{var}"), Markdown(f"{val}")])
 
                 current.card["train_progress"].append(Table(params))
@@ -371,17 +373,21 @@ class ModelOps:
 
             def on_log(self, args, state, control, model=None, logs=None, **kwargs):
                 if 'loss' in logs:
-                    self.grad_norm_data.append({"step": self.most_recent_step, "value": logs['grad_norm']})
-                    self.grad_norm_chart.update(self.grad_norm_vega_spec)
-                    self.lr_data.append({"step": self.most_recent_step, "value": logs['learning_rate']})
-                    self.lr_chart.update(self.lr_vega_spec)
                     self.train_loss_data.append({"step": self.most_recent_step, "value": logs['loss']})
                     self.train_loss_chart.update(self.train_loss_vega_spec)
+                if 'learning_rate' in logs:
+                    self.lr_data.append({"step": self.most_recent_step, "value": logs['learning_rate']})
+                    self.lr_chart.update(self.lr_vega_spec)
+                if 'grad_norm' in logs:
+                    self.grad_norm_data.append({"step": self.most_recent_step, "value": logs['grad_norm']})
+                    self.grad_norm_chart.update(self.grad_norm_vega_spec)
                 if 'eval_loss' in logs:
                     self.eval_loss_data.append({"step": self.most_recent_step, "value": logs['eval_loss']})
                     self.eval_loss_chart.update(self.eval_loss_vega_spec)
+                if 'eval_accuracy' in logs:
                     self.eval_acc_data.append({"step": self.most_recent_step, "value": logs['eval_accuracy']})
                     self.eval_acc_chart.update(self.eval_acc_vega_spec)
+                if 'eval_macro_f1' in logs:
                     self.eval_macro_f1_data.append({"step": self.most_recent_step, "value": logs['eval_macro_f1']})
                     self.eval_macro_f1_chart.update(self.eval_macro_f1_vega_spec)
                 if 'train_runtime' in logs:
@@ -456,6 +462,7 @@ class ModelOps:
 
         # train the cell type classifier
         trainer.train()
+        self._hyperparams = _hyperparams
         predictions = trainer.predict(organ_evalset)
         with open(f"{output_dir}predictions.pickle", "wb") as fp:
             pickle.dump(predictions, fp)

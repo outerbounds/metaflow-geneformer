@@ -20,11 +20,11 @@ NUM_GPUS = 1
 # number cpu cores
 NUM_CPUS = 4
 # batch size for training and eval
-GENEFORMER_BATCH_SIZE = 64  # NOTE: 12 raised OOM on 16GB GPU with big model
+GENEFORMER_BATCH_SIZE = 12
 # learning schedule
 LR_SCHEDULE_FN = "linear"
 # warmup steps
-WARMUP_STEPS = 5  # 500
+WARMUP_STEPS = 100
 # number of epochs
 EPOCHS = 10
 # optimizer
